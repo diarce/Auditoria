@@ -50,7 +50,7 @@ Auditoria/
 
 | Estado | Empresas | Tratamiento |
 |---|---|---|
-| Auditable — protocolo manual | 3 | Sitios Auditables |
+| Auditable — protocolo manual | 3 | Tres plataformas con e-commerce propio |
 | Excluida del QA | 4 | Solo redes sociales — documentar como brecha digital |
 | Pendiente de campo | 4 | Sin URL verificada — relevamiento presencial |
 | Por verificar | 3 | Datos incompletos |

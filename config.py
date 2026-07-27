@@ -43,7 +43,7 @@ RESEARCH_CONTEXT = {
 SITES = [
     {
         "id"      : "MIS001",
-        "name"    : "Makro Posadas",
+        "name"    : "Plataforma Mayorista A",
         "base_url": "https://www.makro.com.ar",
         "dynamic" : True,
         "platform": "VTEX",
@@ -64,7 +64,7 @@ SITES = [
     },
     {
         "id"      : "MIS002",
-        "name"    : "DIA% Mayorista",
+        "name"    : "Plataforma Mayorista B",
         "base_url": "https://diaonline.supermercadosdia.com.ar",
         "dynamic" : True,
         "platform": "Custom",
@@ -85,7 +85,7 @@ SITES = [
     },
     {
         "id"      : "MIS003",
-        "name"    : "Vital Mayorista NEA",
+        "name"    : "Plataforma Regional C",
         "base_url": "https://www.vital.com.ar",
         "dynamic" : False,
         "platform": "Magento / Custom",

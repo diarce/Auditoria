@@ -27,21 +27,21 @@ logger = logging.getLogger(__name__)
 _SIMULATED_SITES = [
     {
         "id"      : "MIS001",
-        "name"    : "Makro Posadas",
+        "name"    : "Plataforma Mayorista A",
         "base_url": "https://www.makro.com.ar",
         "platform": "VTEX",
         "region"  : "Misiones · Posadas / Garupá / Itaembé Guazú",
     },
     {
         "id"      : "MIS002",
-        "name"    : "DIA% Mayorista",
+        "name"    : "Plataforma Mayorista B",
         "base_url": "https://diaonline.supermercadosdia.com.ar",
         "platform": "Custom",
         "region"  : "Misiones · Posadas / Garupá / Itaembé Guazú",
     },
     {
         "id"      : "MIS003",
-        "name"    : "Vital Mayorista NEA",
+        "name"    : "Plataforma Regional C",
         "base_url": "https://www.vital.com.ar",
         "platform": "Magento / Custom",
         "region"  : "Misiones · Posadas / Garupá / Itaembé Guazú",
