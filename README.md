@@ -1,207 +1,115 @@
-# Herramienta de Auditoría de Proceso de Compra — Mayoristas de Consumo Masivo
+# AuditMayorista
 
-## Descripción
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/diarce/Tesis_Maen/blob/main/AuditMayorista_Colab.ipynb)
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://tesismaen-xkoosnwvwtguclm8zcucui.streamlit.app/)
 
-Sistema de auditoría académica que combina técnicas de **Quality Assurance (QA)**
-y **web scraping ético** para relevar y evaluar el proceso de compra en plataformas
-de comercio electrónico mayorista.
-
-Implementa el plan de relevamiento en 5 fases descrito en el proyecto de
-investigación, con 8 dimensiones de análisis y más de 30 casos de prueba.
+Herramienta de auditoría automatizada de calidad funcional (QA) para plataformas
+de comercio electrónico mayorista. Desarrollada como instrumento metodológico para
+la Tesis de Maestría en Administración Estratégica de Negocios (UNaM FCE).
 
 ---
 
-## Estructura del proyecto
+## Ejecución en Google Colab
+
+**Un clic — sin instalación:**
+
+1. Hacer clic en el badge **Open in Colab** (arriba)  
+   ó abrir directamente:  
+   `https://colab.research.google.com/github/diarce/Tesis_Maen/blob/main/AuditMayorista_Colab.ipynb`
+
+2. En Colab: **Entorno de ejecución → Ejecutar todo** (`Ctrl+F9`)
+
+El notebook clona automáticamente este repositorio, instala las dependencias
+y ejecuta el sistema completo. No requiere configuración adicional.
+
+---
+
+## Estructura del sistema
 
 ```
-majorista_audit/
-├── main.py               ← Punto de entrada / CLI
-├── config.py             ← Configuración: sitios, parámetros, casos de prueba
-├── requirements.txt
+Tesis_Maen/
+├── AuditMayorista_Colab.ipynb   ← Notebook principal (ejecutar en Colab)
+├── app.py                        ← Interfaz Streamlit (versión web)
+├── config.py                     ← Configuración del sistema
+├── CITATION.cff                  ← Metadatos de cita académica
+│
 ├── modules/
-│   ├── ethics.py         ← Resguardos éticos (robots.txt, rate limit, log)
-│   ├── scraper.py        ← Motor de scraping de catálogo
-│   ├── auditor.py        ← Motor de auditoría QA
-│   ├── storage.py        ← Persistencia SQLite + exportación CSV
-│   ├── reporter.py       ← Generación de informes (consola / CSV / HTML)
-│   └── demo.py           ← Demostración con datos simulados
-└── outputs/
-    ├── audit.db          ← Base de datos SQLite
-    ├── logs/             ← Logs de ejecución y acceso ético
-    ├── csv/              ← Exportaciones CSV
-    ├── reports/          ← Informes HTML
-    └── snapshots/        ← Capturas de pantalla (opcional)
+│   ├── auditor.py    ← Motor de auditoría QA (8 dimensiones, 34 indicadores)
+│   ├── reporter.py   ← Generador de informes HTML y visualizaciones SVG
+│   ├── universo.py   ← Gestión del universo de empresas del estudio
+│   ├── importer.py   ← Importación de auditorías manuales (CSV/Excel)
+│   ├── storage.py    ← Base de datos SQLite
+│   ├── demo.py       ← Datos representativos del mercado mayorista
+│   └── ethics.py     ← Protocolo ético (robots.txt, rate limiting)
+│
+└── data/
+    ├── universo_mayoristas_posadas.csv  ← Universo relevado (14 empresas)
+    ├── empresas_mayoristas.json         ← Catálogo de sitios configurados
+    └── provincias_localidades.json      ← Localidades del estudio
 ```
 
 ---
 
-## Instalación
+## Universo del estudio
 
-```bash
-# 1. Clonar o copiar el directorio del proyecto
-cd majorista_audit
+| Estado | Empresas | Tratamiento |
+|---|---|---|
+| Auditable (protocolo manual) | 3 | Makro, DIA%, Vital NEA |
+| Excluida del QA | 4 | Solo redes sociales — documentar como brecha digital |
+| Pendiente de campo | 4 | Sin URL verificada — relevamiento presencial |
+| Por verificar | 3 | Datos incompletos |
 
-# 2. Crear entorno virtual (recomendado)
-python -m venv .venv
-source .venv/bin/activate        # Linux/Mac
-.venv\Scripts\activate           # Windows
-
-# 3. Instalar dependencias
-pip install -r requirements.txt
-
-# 4. (Opcional) Para sitios con JavaScript dinámico
-playwright install chromium
-```
+Los sitios con e-commerce propio bloquean el acceso automatizado vía `robots.txt`.
+El sistema respeta esta directiva como parte del protocolo ético de investigación
+y utiliza el modo demo para generar datos representativos del mercado.
 
 ---
 
-## Uso rápido
+## Marco teórico
 
-### Demostración (sin conexión a internet)
-```bash
-python main.py demo
-```
-Genera datos simulados de 3 sitios mayoristas y produce el informe completo.
-
-### Listar sitios configurados
-```bash
-python main.py list-sites
-```
-
-### Auditoría QA (requiere conectividad)
-```bash
-# Auditar todos los sitios configurados en config.py
-python main.py audit
-
-# Auditar un sitio específico
-python main.py audit --site SITE001
-
-# Solo una dimensión (ej: Ficha de producto)
-python main.py audit --dimension D3
-
-# Simular sin hacer requests reales
-python main.py audit --dry-run
-```
-
-### Scraping de catálogo
-```bash
-# Primer snapshot temporal (día 0)
-python main.py scrape --snapshot 1
-
-# Segundo snapshot (día 7)
-python main.py scrape --snapshot 2
-
-# Tercer snapshot (día 14)
-python main.py scrape --snapshot 3
-```
-
-### Generar informes
-```bash
-python main.py report              # Todos los formatos
-python main.py report --format html    # Solo HTML
-python main.py report --format csv     # Solo CSV
-python main.py report --format console # Solo consola
-```
+- **Transformación Digital:** Verhoef et al. (2021)
+- **Capacidades Dinámicas:** Teece et al. (1997); Teece (2007); Wilden et al. (2013)
+- **Alianzas Estratégicas:** Dyer & Singh (1998); Cao & Zhang (2011)
+- **ODS:** 8 (Trabajo decente), 9 (Innovación), 17 (Alianzas)
 
 ---
 
-## Configuración de sitios
+## Instrumento QA
 
-Editar `config.py` → sección `SITES`. Cada sitio requiere:
+| Dimensión | Indicadores | Peso |
+|---|---|---|
+| D1 — Estructura y navegación | 5 | 1.5 |
+| D2 — Registro y autenticación | 4 | 1.0 |
+| D3 — Ficha de producto | 6 | 2.0 |
+| D4 — Carrito de compras | 4 | 1.5 |
+| D5 — Proceso de checkout | 4 | 1.5 |
+| D6 — Medios de pago | 4 | 1.5 |
+| D7 — Comunicación de errores | 3 | 1.0 |
+| D8 — Desempeño técnico | 4 | 1.5 |
 
-```python
-{
-    "id"       : "SITE001",            # Identificador único
-    "name"     : "Nombre del sitio",
-    "base_url" : "https://www.sitio.com.ar",
-    "dynamic"  : False,                # True si usa JavaScript para renderizar
-    "platform" : "VTEX",               # Plataforma e-commerce
-    "region"   : "Nacional",
-    "selectors": {
-        "product_card" : ".product-item",    # Selector CSS de tarjeta de producto
-        "product_name" : ".product-name",
-        "product_price": ".price",
-        # ... (ver config.py para todos los campos)
-    }
+**ICC** = Σ(S_ik × w_k) / Σw_k  |  Escala 0–3  |  Suma de pesos = 11.5
+
+---
+
+## Cita
+
+```bibtex
+@software{AuditMayorista2026,
+  author  = {Arce, Diego Enrique},
+  title   = {{AuditMayorista}: Herramienta de auditoria automatizada
+             de calidad funcional para plataformas de comercio
+             electronico mayorista},
+  year    = {2026},
+  version = {5.0},
+  url     = {https://github.com/diarce/Tesis_Maen}
 }
 ```
 
----
-
-## Dimensiones de auditoría
-
-| ID | Dimensión                        | Peso |
-|----|----------------------------------|------|
-| D1 | Estructura y navegación          | 1.0  |
-| D2 | Registro y autenticación         | 1.5  |
-| D3 | Ficha de producto                | 2.0  |
-| D4 | Carrito de compras               | 1.5  |
-| D5 | Proceso de checkout              | 2.0  |
-| D6 | Medios de pago                   | 1.5  |
-| D7 | Comunicación de errores          | 1.0  |
-| D8 | Desempeño técnico                | 1.0  |
-
-### Escala de cumplimiento
-
-| Valor | Etiqueta            |
-|-------|---------------------|
-| 3     | Cumple plenamente   |
-| 2     | Cumple parcialmente |
-| 1     | No cumple           |
-| 0     | No aplica / N/V     |
+> Ver botón **"Cite this repository"** en el panel derecho de GitHub.
 
 ---
 
-## Protocolo ético de scraping
-
-El sistema implementa los siguientes resguardos en `modules/ethics.py`:
-
-1. **Verificación de `robots.txt`**: antes de cada acceso, se consulta el
-   archivo de restricciones del sitio. Si el acceso está denegado, se omite.
-
-2. **Rate limiting**: pausa mínima configurable entre requests (default: 3 s)
-   más jitter aleatorio (±1.5 s) para evitar patrones predecibles.
-
-3. **User-Agent académico**: el bot se identifica con propósito académico
-   y datos de contacto del investigador.
-
-4. **Log de transparencia**: todos los accesos se registran en
-   `outputs/logs/access_log_*.csv` con URL, código HTTP y tiempo de respuesta.
-
-5. **Límites de extracción**: máximo configurable de productos por sitio
-   y por categoría para no sobrecargar el servidor auditado.
-
----
-
-## Salidas del sistema
-
-| Archivo                         | Descripción                              |
-|---------------------------------|------------------------------------------|
-| `outputs/audit.db`              | Base de datos SQLite con todos los datos |
-| `outputs/csv/products_*.csv`    | Catálogo de productos extraídos          |
-| `outputs/csv/audit_results_*.csv` | Resultados de auditoría QA             |
-| `outputs/csv/price_history_*.csv` | Historial de precios (3 snapshots)     |
-| `outputs/csv/price_variation_*.csv` | Variación % entre cortes temporales  |
-| `outputs/reports/informe_*.html`| Informe HTML con gráficos radar          |
-| `outputs/logs/run_*.log`        | Log de ejecución                         |
-| `outputs/logs/access_log_*.csv` | Log de transparencia ética               |
-
----
-
-## Cita académica
-
-Si este sistema es utilizado en publicaciones académicas, citar como:
-
-> Sistema de auditoría de proceso de compra en mayoristas de consumo masivo.
-> Herramienta de investigación académica — metodología mixta (QA + web scraping).
-> [Nombre del investigador], [Institución], [Año].
-
----
-
-## Consideraciones legales y éticas
-
-- El sistema opera exclusivamente sobre información pública disponible sin autenticación.
-- No realiza compras reales ni almacena datos de medios de pago.
-- Respeta las restricciones del archivo `robots.txt` de cada sitio.
-- Los datos se usan exclusivamente con fines de investigación académica.
-- Se recomienda revisar los términos y condiciones de cada sitio antes de ejecutar.
+**Autor:** Diego Enrique Arce  
+**Director:** Dr. Carlos Roberto Brys  
+**Institución:** Universidad Nacional de Misiones — Facultad de Ciencias Económicas  
+**Año:** 2026
