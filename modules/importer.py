@@ -27,7 +27,7 @@ from typing import List, Dict
 import pandas as pd
 
 from modules.storage import DatabaseManager
-from config import QA_DIMENSIONS, TEST_CASES
+from config import QA_DIMENSIONS, QA_TEST_CASES as TEST_CASES
 
 
 # ─── Constantes ───────────────────────────────────────────────────────────────
@@ -208,7 +208,7 @@ def generar_plantilla_csv(destino: str | Path = "plantilla_auditoria_manual.csv"
     casos de prueba pre-cargados, lista para que el investigador
     complete los valores de compliance.
     """
-    from config import TEST_CASES, QA_DIMENSIONS
+    from config import QA_TEST_CASES as TEST_CASES, QA_DIMENSIONS
 
     destino = Path(destino)
     filas   = []
