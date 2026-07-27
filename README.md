@@ -1,6 +1,6 @@
 # AuditMayorista
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/diarce/Tesis_Maen/blob/main/AuditMayorista_Colab.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/diarce/Auditoria/blob/main/AuditMayorista_Colab.ipynb)
 [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://tesismaen-xkoosnwvwtguclm8zcucui.streamlit.app/)
 
 Herramienta de auditoría automatizada de calidad funcional (QA) para plataformas
@@ -15,7 +15,7 @@ la Tesis de Maestría en Administración Estratégica de Negocios (UNaM FCE).
 
 1. Hacer clic en el badge **Open in Colab** (arriba)  
    ó abrir directamente:  
-   `https://colab.research.google.com/github/diarce/Tesis_Maen/blob/main/AuditMayorista_Colab.ipynb`
+   `https://colab.research.google.com/github/diarce/Auditoria/blob/main/AuditMayorista_Colab.ipynb`
 
 2. En Colab: **Entorno de ejecución → Ejecutar todo** (`Ctrl+F9`)
 
@@ -101,7 +101,7 @@ y utiliza el modo demo para generar datos representativos del mercado.
              electronico mayorista},
   year    = {2026},
   version = {5.0},
-  url     = {https://github.com/diarce/Tesis_Maen}
+  url     = {https://github.com/diarce/Auditoria}
 }
 ```
 
