@@ -1,7 +1,6 @@
 # AuditMayorista
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/diarce/Auditoria/blob/main/AuditMayorista_Colab.ipynb)
-[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://tesismaen-xkoosnwvwtguclm8zcucui.streamlit.app/)
 
 Herramienta de auditoría automatizada de calidad funcional (QA) para plataformas
 de comercio electrónico mayorista. Desarrollada como instrumento metodológico para
