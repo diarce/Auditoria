@@ -21,7 +21,7 @@ authors:
     email: diarce@fce.unam.edu.ar
 
 repository-code: "https://github.com/diarce/Auditoria"
-url: "https://colab.research.google.com/github/diarce/Auditoria/blob/main/AuditMayorista_Colab.ipynb#scrollTo=zx3ddysaE2_x"
+url: "https://tesismaen-xkoosnwvwtguclm8zcucui.streamlit.app/"
 license: CC-BY-SA-2.5
 
 abstract: >-
@@ -31,17 +31,24 @@ abstract: >-
   de Negocios (UNaM FCE). Implementa un Índice de Calidad Compuesto
   (ICC) ponderado sobre ocho dimensiones y 34 indicadores de calidad
   funcional, con protocolo ético de scraping y generación de informes
-  académicos anonimizados.
+  académicos anonimizados. Incluye el universo relevado de empresas
+  mayoristas de consumo masivo de Posadas, Garupá e Itaembé Guazú,
+  Misiones, Argentina.
 
 keywords:
   - comercio electrónico mayorista
-  - alianza estrategicas
+  - e-commerce
   - auditoría digital
+  - calidad funcional
   - capacidades dinámicas
   - transformación digital
+  - Posadas
   - Misiones
+  - NEA
   - Argentina
   - Python
+  - Streamlit
+  - Google Colab
 
 preferred-citation:
   type: thesis
