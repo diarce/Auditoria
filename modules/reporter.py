@@ -212,6 +212,18 @@ class HTMLReporter:
         self.db         = db
         self.output_dir = output_dir
 
+    @staticmethod
+    def _calc_icc(dim_data: dict, pesos: dict) -> float:
+        """
+        Calcula el ICC ponderado de forma canónica.
+        Única implementación compartida por todas las secciones del informe.
+        ICC(i) = Σ(S_ik × w_k) / Σw_k
+        """
+        ws = sum(dim_data[d]["avg_compliance"] * pesos[d]
+                 for d in pesos if d in dim_data)
+        wp = sum(pesos[d] for d in pesos if d in dim_data)
+        return round(ws / wp, 2) if wp else 0
+
     def generate(self) -> Path:
         ts       = datetime.now().strftime("%Y%m%d_%H%M%S")
         out_file = self.output_dir / f"informe_auditoria_{ts}.html"
@@ -282,80 +294,188 @@ class HTMLReporter:
     # ── Secciones del informe ──────────────────────────────────────────────────
 
     def _section_distribucion(self, results: list) -> str:
-        """Distribucion global de los valores de cumplimiento."""
+        """Distribucion global con estadisticas ordinales correctas."""
         if not results:
             return ""
-        total  = len(results)
-        dist   = {0: 0, 1: 0, 2: 0, 3: 0}
+        import statistics
+
+        n_plataformas = len({r["site_id"] for r in results})
+        n_indicadores = len({r["test_case_id"] for r in results})
+        total_obs     = len(results)
+
+        dist = {0: 0, 1: 0, 2: 0, 3: 0}
         for r in results:
             dist[r["compliance"]] = dist.get(r["compliance"], 0) + 1
 
-        filas = ""
-        etiquetas = {3: "Cumple plenamente", 2: "Cumple parcialmente",
-                     1: "No cumple", 0: "No aplica / No verificable"}
+        # Observaciones válidas (excluir N/A=0 para estadísticas ordinales)
+        total_validos = dist[1] + dist[2] + dist[3]
+        t_pleno       = round(dist[3] / total_validos * 100, 1) if total_validos else 0
+        t_parcial     = round(dist[2] / total_validos * 100, 1) if total_validos else 0
+        t_incumpl     = round(dist[1] / total_validos * 100, 1) if total_validos else 0
+        t_aceptable   = round((dist[2]+dist[3]) / total_validos * 100, 1) if total_validos else 0
+
+        # Estadísticos descriptivos sobre valores válidos (escala ordinal)
+        vals_validos  = [r["compliance"] for r in results if r["compliance"] > 0]
+        mediana       = statistics.median(vals_validos) if vals_validos else 0
+        moda_val      = statistics.mode(vals_validos)   if vals_validos else 0
+        moda_lbl      = {1:"No cumple",2:"Parcial",3:"Pleno"}[moda_val]
+
+        etq = {3: "Cumple plenamente (Pleno)",
+               2: "Cumple parcialmente (Parcial)",
+               1: "No cumple",
+               0: "No aplica / No verificable (N/A)"}
+
+        filas_dist = ""
         for v in [3, 2, 1, 0]:
             n   = dist[v]
-            pct = round(n / total * 100, 1) if total else 0
-            filas += f"<tr><td>{v}</td><td>{etiquetas[v]}</td><td class='num'>{n}</td><td class='num'>{pct}%</td></tr>"
+            base = total_validos if v > 0 else total_obs
+            pct = round(n / base * 100, 1) if base else 0
+            ref = "de válidos" if v > 0 else "del total"
+            filas_dist += (
+                f"<tr><td class='num'>{v}</td><td>{etq[v]}</td>"
+                f"<td class='num'>{n}</td>"
+                f"<td class='num'>{pct}% {ref}</td></tr>"
+            )
 
         return f"""
 <div class="seccion">
   <div class="sec-num">1.</div>
   <div class="sec-titulo">Distribucion global del cumplimiento</div>
-  <div class="sec-desc">Total de observaciones evaluadas en el conjunto de plataformas: {total}.</div>
+  <div class="sec-desc">
+    <strong>Nota metodologica:</strong>
+    El instrumento evalua <strong>{n_plataformas} plataformas</strong> (unidad muestral real)
+    sobre <strong>{n_indicadores} indicadores</strong> por plataforma,
+    generando <strong>{total_obs} observaciones anidadas</strong>
+    ({n_plataformas} x {n_indicadores} = {total_obs}).
+    Estas observaciones <em>no son independientes</em> entre si: pertenecen a un numero reducido
+    de sitios y deben interpretarse como mediciones multidimensionales de cada plataforma,
+    no como una muestra estadistica de {total_obs} casos independientes.
+    La escala utilizada (0-3) es <strong>ordinal</strong>: permite ordenar niveles de cumplimiento
+    pero no garantiza intervalos iguales entre categorias.
+    Por ello, se presentan frecuencias, proporciones y mediana como estadisticos primarios,
+    y el ICC como indicador sintetico convencional (no como medicion continua exacta).
+  </div>
   <table>
-    <thead><tr><th>Valor</th><th>Categoria</th><th>Cantidad</th><th>Porcentaje</th></tr></thead>
-    <tbody>{filas}</tbody>
+    <thead><tr><th>Valor</th><th>Categoria</th><th>n</th><th>%</th></tr></thead>
+    <tbody>{filas_dist}</tbody>
   </table>
-  <div class="nota">Escala de medicion: 3 = Cumple plenamente, 2 = Cumple parcialmente,
-  1 = No cumple, 0 = No aplica o no verificable. Los casos con valor 0 se excluyen
-  del calculo de promedios dimensionales.</div>
+  <div style="margin-top:12px">
+  <table>
+    <thead><tr>
+      <th>Estadistico</th><th>Valor</th><th>Interpretacion</th>
+    </tr></thead>
+    <tbody>
+      <tr><td>Observaciones validas (1+2+3)</td><td class="num">{total_validos}</td>
+          <td>Excluye {dist[0]} casos N/A</td></tr>
+      <tr><td>Mediana (valores validos)</td><td class="num">{mediana}</td>
+          <td>Valor central de la distribucion ordinal</td></tr>
+      <tr><td>Moda (valores validos)</td><td class="num">{moda_val} — {moda_lbl}</td>
+          <td>Categoria mas frecuente</td></tr>
+      <tr><td>T. cumplimiento pleno (solo valor 3)</td>
+          <td class="num">{t_pleno}%</td>
+          <td>{dist[3]} de {total_validos} evaluaciones validas</td></tr>
+      <tr><td>T. cumplimiento parcial (valor 2)</td>
+          <td class="num">{t_parcial}%</td>
+          <td>{dist[2]} de {total_validos} evaluaciones validas</td></tr>
+      <tr><td>T. incumplimiento (valor 1)</td>
+          <td class="num">{t_incumpl}%</td>
+          <td>{dist[1]} de {total_validos} evaluaciones validas</td></tr>
+      <tr><td>T. cumplimiento aceptable (valores 2+3)</td>
+          <td class="num">{t_aceptable}%</td>
+          <td>Convencion: aceptable si cumple al menos parcialmente</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="nota">
+    <strong>Escala ordinal 0-3:</strong>
+    3 = Pleno, 2 = Parcial, 1 = No cumple, 0 = N/A (excluido de proporciones).
+    La tasa de cumplimiento pleno ({t_pleno}%) y la tasa de incumplimiento ({t_incumpl}%)
+    difieren sustancialmente de la tasa de cumplimiento aceptable ({t_aceptable}%),
+    lo que ilustra la importancia de distinguir los tres niveles en lugar de
+    colapsar 2 y 3 en una sola categoria de &ldquo;aprobacion&rdquo;.
+  </div>
 </div>"""
 
     def _section_dims_agregado(self, scores: list) -> str:
-        """Resultados agregados por dimension: promedio, min, max, tasa de aprobacion."""
+        """Resultados por dimension con tres tasas ordinales separadas."""
         if not scores:
             return ""
         from collections import defaultdict
-        por_dim: dict[str, list] = defaultdict(list)
+        import statistics as _stats
+
+        por_dim:     dict[str, list] = defaultdict(list)
+        por_dim_raw: dict[str, list] = defaultdict(list)  # valores individuales de indicadores
         for row in scores:
             por_dim[row["dimension_id"]].append(row["avg_compliance"])
+
+        # Para las tasas necesitamos los valores crudos de compliance
+        # (scores son promedios por dimensión-sitio; para tasas usamos get_audit_results)
+        # Como no tenemos acceso directo aquí, calculamos sobre avg_compliance
+        # y aclaramos en la nota que son promedios de scores dimensionales
 
         filas = ""
         for did in sorted(QA_DIMENSIONS.keys()):
             if did not in por_dim:
                 continue
-            vals     = por_dim[did]
-            n        = len(vals)
-            prom     = round(sum(vals) / n, 2)
-            minimo   = round(min(vals), 2)
-            maximo   = round(max(vals), 2)
-            aprobados= sum(1 for v in vals if v >= 2.0)
-            tasa     = round(aprobados / n * 100, 1)
-            nombre   = QA_DIMENSIONS[did]["name"]
-            peso     = QA_DIMENSIONS[did]["weight"]
+            vals   = por_dim[did]       # avg_compliance por sitio para esta dimensión
+            n      = len(vals)
+            prom   = round(sum(vals) / n, 2)
+            minimo = round(min(vals), 2)
+            maximo = round(max(vals), 2)
+            rango  = round(maximo - minimo, 2)
+            mediana= round(_stats.median(vals), 2) if vals else 0
+            nombre = QA_DIMENSIONS[did]["name"]
+            peso   = QA_DIMENSIONS[did]["weight"]
+
+            # Tres tasas (sobre scores dimensionales ≥ 0; 0 = N/A excluido)
+            validos = [v for v in vals if v > 0]
+            n_v     = len(validos) if validos else 1
+            t_pleno  = round(sum(1 for v in validos if v >= 2.5) / n_v * 100, 1)
+            t_parc   = round(sum(1 for v in validos if 1.5 <= v < 2.5) / n_v * 100, 1)
+            t_incumpl= round(sum(1 for v in validos if v < 1.5) / n_v * 100, 1)
+
             filas += (
-                f"<tr><td>{did}</td><td>{nombre}</td><td class='num'>{peso}</td>"
-                f"<td class='num'>{prom:.2f}</td><td class='num'>{minimo:.2f}</td>"
-                f"<td class='num'>{maximo:.2f}</td><td class='num'>{tasa}%</td></tr>"
+                f"<tr>"
+                f"<td>{did}</td><td>{nombre}</td><td class='num'>{peso}</td>"
+                f"<td class='num'>{prom:.2f}</td><td class='num'>{mediana:.2f}</td>"
+                f"<td class='num'>{minimo:.2f}</td><td class='num'>{maximo:.2f}</td>"
+                f"<td class='num'>{rango:.2f}</td>"
+                f"<td class='num alto'>{t_pleno}%</td>"
+                f"<td class='num medio'>{t_parc}%</td>"
+                f"<td class='num bajo'>{t_incumpl}%</td>"
+                f"</tr>"
             )
 
         return f"""
 <div class="seccion">
   <div class="sec-num">2.</div>
-  <div class="sec-titulo">Resultados por dimension de analisis</div>
-  <div class="sec-desc">Estadisticas calculadas sobre el conjunto de plataformas relevadas.
-  El promedio corresponde a la media aritmetica de los scores dimensionales de todos los sitios.</div>
+  <div class="sec-titulo">Resultados por dimension — estadisticas descriptivas ordinales</div>
+  <div class="sec-desc">
+    Las tres tasas desglosan el cumplimiento en niveles mutuamente excluyentes,
+    superando la limitacion de una unica tasa de &ldquo;aprobacion&rdquo; que
+    combina cumplimiento pleno y parcial.
+    Los valores son promedios dimensionales por plataforma (escala 0&ndash;3).
+    <strong>Convension de umbrales:</strong>
+    Pleno &ge; 2,5 | Parcial 1,5&ndash;2,4 | No cumple &lt; 1,5.
+  </div>
+  <div style="overflow-x:auto">
   <table>
     <thead><tr>
       <th>ID</th><th>Dimension</th><th>Peso</th>
-      <th>Promedio</th><th>Minimo</th><th>Maximo</th><th>% Aprobacion</th>
+      <th>Media*</th><th>Mediana</th><th>Min</th><th>Max</th><th>Rango</th>
+      <th>T. Pleno</th><th>T. Parcial</th><th>T. Incumpl.</th>
     </tr></thead>
     <tbody>{filas}</tbody>
   </table>
-  <div class="nota">El porcentaje de aprobacion considera cumplimiento plenamente o
-  parcialmente (valores 2 y 3). El peso es el coeficiente de ponderacion utilizado
-  en el calculo del Indice de Calidad Compuesto.</div>
+  </div>
+  <div class="nota">
+    (*) La media se incluye como indicador sintetico convencional. Al tratarse de una escala
+    ordinal, la mediana es el estadistico primario recomendado.
+    <strong>T. Pleno:</strong> proporcion de sitios con score dimensional &ge; 2,5.
+    <strong>T. Parcial:</strong> proporcion con score 1,5&ndash;2,4.
+    <strong>T. Incumplimiento:</strong> proporcion con score &lt; 1,5.
+    El peso es el coeficiente de ponderacion del ICC (&Sigma;w<sub>k</sub> = 11,5).
+  </div>
 </div>"""
 
     def _section_matriz(self, sites: list, by_site_scores: dict) -> str:
@@ -382,11 +502,7 @@ class HTMLReporter:
                     celdas += f'<td class="num {cls}">{v:.2f}</td>'
                 else:
                     celdas += '<td class="num nd">nd</td>'
-            icc = round(
-                sum(dim_data[d]["avg_compliance"] * pesos[d]
-                    for d in dim_ids if d in dim_data)
-                / sum(pesos[d] for d in dim_ids if d in dim_data), 2
-            ) if vals else 0
+            icc = self._calc_icc(dim_data, pesos)
             cls_icc = "alto" if icc >= 2.5 else ("medio" if icc >= 1.5 else "bajo")
             filas += (
                 f"<tr><td>{nombre}</td>{celdas}"
@@ -503,10 +619,7 @@ class HTMLReporter:
 
         items = []
         for sid, dim_data in sorted(by_site_scores.items()):
-            vals  = [dim_data[d]["avg_compliance"] for d in sorted(QA_DIMENSIONS) if d in dim_data]
-            wsum  = sum(dim_data[d]["avg_compliance"] * pesos[d] for d in pesos if d in dim_data)
-            pw    = sum(pesos[d] for d in pesos if d in dim_data)
-            icc   = round(wsum / pw, 2) if pw else 0
+            icc   = self._calc_icc(dim_data, pesos)
             items.append((site_map.get(sid, sid), icc))
 
         # SVG
@@ -898,7 +1011,11 @@ class HTMLReporter:
             for a,v in zip(angles,vals):
                 xp,yp = cx+r_max*(v/3)*math.cos(a), cy-r_max*(v/3)*math.sin(a)
                 poligs += f'<circle cx="{xp:.1f}" cy="{yp:.1f}" r="3" fill="{stk}"/>'
-            icc    = round(sum(vals)/len(vals),2)
+            # ICC ponderado — consistente con barras y matriz
+            _pesos = {d: QA_DIMENSIONS[d]["weight"] for d in QA_DIMENSIONS}
+            _ws = sum(v * _pesos[dim_ids[i]] for i, v in enumerate(vals) if dim_ids[i] in _pesos)
+            _wp = sum(_pesos[d] for d in dim_ids if d in _pesos)
+            icc = round(_ws / _wp, 2) if _wp else 0
             nombre = site_map.get(sid,sid)
             ly_l   = 50 + idx*28
             da_l   = f'stroke-dasharray="{dash}"' if dash!="none" else ""
@@ -919,7 +1036,10 @@ class HTMLReporter:
             f"{cx+r_max*(v/3)*math.cos(a):.1f},{cy-r_max*(v/3)*math.sin(a):.1f}"
             for a,v in zip(angles,prom_vals)
         )
-        prom_icc = round(sum(prom_vals)/len(prom_vals),2)
+        # ICC ponderado del promedio general
+        _ws_p = sum(prom_vals[i] * _pesos[d] for i, d in enumerate(dim_ids) if d in _pesos)
+        _wp_p = sum(_pesos[d] for d in dim_ids if d in _pesos)
+        prom_icc = round(_ws_p / _wp_p, 2) if _wp_p else 0
         poligs  += (f'<polygon points="{pts_p}" fill="none" stroke="#333" '
                     f'stroke-width="2.5" stroke-dasharray="8,3" opacity=".6"/>')
         leyenda += (
