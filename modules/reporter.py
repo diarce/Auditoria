@@ -93,10 +93,15 @@ class ConsoleReporter:
                     scores_list.append(avg)
                 else:
                     row += f" {'—':>{col_w-1}}"
-            # Índice compuesto (promedio ponderado)
+            # Índice compuesto — media ponderada (Σ s×w / Σw), idéntica al HTML
+            # Bug previo: idx = round(sum(scores_list) / len(scores_list), 2)  ← sin pesos
             if scores_list:
-                idx = round(sum(scores_list) / len(scores_list), 2)
-                row += f" {idx:>{col_w}.2f}"
+                dims_presentes = [d for d in dim_ids if d in dim_data]
+                sum_sw = sum(s * QA_DIMENSIONS[d]["weight"]
+                             for s, d in zip(scores_list, dims_presentes))
+                sum_w  = sum(QA_DIMENSIONS[d]["weight"] for d in dims_presentes)
+                idx    = round(sum_sw / sum_w, 2) if sum_w else 0
+                row   += f" {idx:>{col_w}.2f}"
             print(row)
 
         print("─" * (name_w + col_w * len(dim_ids) + 12))
@@ -533,7 +538,7 @@ class HTMLReporter:
 
         return f"""
 <div class="seccion">
-  <div class="sec-num">3.</div>
+  <div class="sec-num">5.</div>
   <div class="sec-titulo">Matriz de cumplimiento</div>
   <div class="sec-desc">Cada celda representa el promedio de cumplimiento de una dimension
   para una plataforma. El Indice de Calidad Compuesto (ICC) es la media ponderada
@@ -735,6 +740,9 @@ class HTMLReporter:
         poligonos = ""
         leyenda_items = ""
 
+        # Pesos del ICC — deben coincidir con _calc_icc y _section_barras_icc
+        pesos = {d: QA_DIMENSIONS[d]["weight"] for d in QA_DIMENSIONS}
+
         for idx, (sid, dim_data) in enumerate(sorted(by_site_scores.items())):
             fill_col, stk_col, sw, dash, symbol, leg_col = estilos[idx % len(estilos)]
             values = [dim_data.get(d, {}).get("avg_compliance", 0) for d in dim_ids]
@@ -754,7 +762,9 @@ class HTMLReporter:
                 poligonos += f'<circle cx="{xp:.1f}" cy="{yp:.1f}" r="3" fill="{stk_col}"/>'
 
             nombre = site_map.get(sid, sid)
-            icc    = round(sum(values)/len(values), 2) if values else 0
+            # FIX: usar media ponderada (idéntica a _calc_icc y _section_barras_icc)
+            # Bug previo: icc = round(sum(values)/len(values), 2)  ← media simple sin pesos
+            icc = self._calc_icc(dim_data, pesos)
             ly_leg = 55 + idx * 28
             da_leg = f'stroke-dasharray="{dash}"' if dash != "none" else ""
             leyenda_items += (
@@ -779,7 +789,12 @@ class HTMLReporter:
         )
         poligonos += (f'<polygon points="{pts_prom}" fill="none" stroke="#333" '
                       f'stroke-width="2.5" stroke-dasharray="8,3" opacity="0.6"/>')
-        prom_icc = round(sum(prom_vals)/len(prom_vals), 2)
+        # FIX: ICC del promedio también debe ser ponderado, no media simple de prom_vals.
+        # Bug previo: prom_icc = round(sum(prom_vals)/len(prom_vals), 2)
+        _ws_prom = sum(prom_vals[i] * pesos[dim_ids[i]]
+                       for i in range(len(dim_ids)) if dim_ids[i] in pesos)
+        _wp_prom = sum(pesos[d] for d in dim_ids if d in pesos)
+        prom_icc = round(_ws_prom / _wp_prom, 2) if _wp_prom else 0
         leyenda_items += (
             f'<line x1="460" y1="145" x2="500" y2="145" stroke="#333" '
             f'stroke-width="2.5" stroke-dasharray="8,3" opacity="0.6"/>'
