@@ -9,8 +9,8 @@ from bs4 import BeautifulSoup
 DOMINIOS_NO_PROPIOS = (
     "facebook.com", "instagram.com", "wa.me", "whatsapp.com", "linktr.ee", "linktree.com",
     "mercadolibre.com", "mercadolibre.com.ar", "mercadoshops.com", "tiktok.com", "twitter.com",
-    "x.com", "youtube.com", "google.com", "goo.gl", "bit.ly", "linkedin.com", "wixsite.com",
-    "business.site", "tiendanube.com/ar", "pedidosya.com", "rappi.com",
+    "x.com", "youtube.com", "google.com", "goo.gl", "bit.ly", "linkedin.com",
+    "business.site", "pedidosya.com", "rappi.com",
 )
 
 
@@ -33,6 +33,10 @@ def normalizar_base(url):
     p = up.urlsplit(url)
     if not p.netloc:
         return None
+    if sin_www(p.netloc) == "google.com" and p.path == "/url":      # enlaces de redirección de Maps
+        q = up.parse_qs(p.query)
+        destino = (q.get("q") or q.get("url") or [None])[0]
+        return normalizar_base(destino) if destino else None
     return f"{p.scheme.lower()}://{p.netloc.lower()}"
 
 
@@ -128,6 +132,11 @@ class Sitio:
 
     def cargar_home(self):
         self.home = self._pagina(self.base + "/")
+        if self.home.ok:                      # si el inicio redirige a otro host, se trabaja sobre el host final
+            fin = up.urlsplit(self.home.resp.url)
+            if fin.netloc and sin_www(fin.netloc) != self.host:
+                self.notas.append(f"redirección de host: {self.host} -> {sin_www(fin.netloc)}")
+                self.base, self.host = f"{fin.scheme}://{fin.netloc}", sin_www(fin.netloc)
         return self.home
 
     def _mismo_host(self, url):

@@ -6,7 +6,7 @@ módulo se verifica que los conteos coincidan con los declarados en el texto de 
 """
 from dataclasses import dataclass, field
 
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 
 
 @dataclass
@@ -44,6 +44,7 @@ class Config:
     # --- Decisiones metodológicas abiertas (ver README) ---
     ACEPTAR_MAYORISTA_DECLARADA: bool = True   # E6: ¿alcanza con declararse mayorista en el sitio?
     MIN_RUBROS_CONSUMO_MASIVO: int = 1         # E7: rubros distintos requeridos (de 3)
+    INCLUIR_MANUALES: bool = False             # False: la corrida automatizada evalúa solo los 25 indicadores automáticos
 
     def user_agent(self) -> str:
         return f"{TOKEN_UA}/{VERSION} (investigacion academica UNaM; contacto: {self.CONTACTO})"
@@ -111,6 +112,12 @@ def _verificar():
     assert sum(1 for i in INDICADORES if i[4] == "Contextual") == 6
     por_dim = {d: sum(1 for i in INDICADORES if i[1] == d) for d in DIMENSIONES}
     assert por_dim == {"D1": 5, "D2": 4, "D3": 5, "D4": 4, "D5": 4, "D6": 3, "D7": 3, "D8": 4}
+
+
+
+def indicadores_activos(cfg):
+    """Indicadores que evalúa esta corrida (por defecto, solo los automáticos)."""
+    return [i for i in INDICADORES if cfg.INCLUIR_MANUALES or i[3] == "A"]
 
 
 _verificar()

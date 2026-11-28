@@ -34,18 +34,31 @@ SENIALES_ONLINE = [
 ]
 
 
+PROV_OTRAS = re.compile(r"buenos aires|\bcaba\b|ciudad autonoma|corrientes|cordoba|santa fe|entre rios|chaco|formosa|tucuman|salta|"
+                        r"mendoza|santiago del estero|jujuy|la pampa|neuquen|rio negro|chubut|santa cruz|tierra del fuego|san luis|"
+                        r"san juan|la rioja|catamarca")
+
+
 def _e1(direccion):
+    """'Posadas' también es nombre de calle en otras ciudades: se exige Misiones o código postal 3300."""
     d = norm(direccion)
     if not d:
         return "no_verificable", "sin_direccion"
-    if "posadas" in d or "itaembe" in d:
+    if "itaembe" in d:
         return "cumple", ""
+    if "posadas" in d:
+        if "misiones" in d or re.search(r"\bn?3300\b", d):
+            return "cumple", ""
+        if PROV_OTRAS.search(d):
+            return "no_cumple", "posadas_en_otra_provincia"
+        return "no_verificable", "sin_provincia_en_direccion"
     return "no_cumple", "direccion_fuera_de_posadas"
 
 
 def cand_id(cfg, c):
-    clave = (c.get("web") or "") or (c.get("nombre", "") + c.get("direccion", ""))
-    return hashlib.sha256((cfg.SALT_ANONIMIZACION + norm(clave)).encode()).hexdigest()[:10]
+    base = normalizar_base(c.get("web"))
+    clave = up.urlsplit(base).netloc.removeprefix("www.") if base else (c.get("nombre", "") + c.get("direccion", ""))
+    return hashlib.sha256((cfg.SALT_ANONIMIZACION + norm(clave)).encode()).hexdigest()[:10]   # estable entre corridas
 
 
 def evaluar(c, etica, cfg):
@@ -82,6 +95,9 @@ def evaluar(c, etica, cfg):
     home = sitio.cargar_home()
     if not home.ok:
         return cerrar("E5", home.resp.error or f"http_{home.resp.status}")
+    if not es_dominio_propio(sitio.base):
+        return cerrar("E3", "redirige_a_red_social_o_marketplace")
+    reg["dominio"] = up.urlsplit(sitio.base).netloc
 
     # E6 mayorista: acreditada (categoría en el origen) o declarada (texto del sitio)
     if RE_MAYORISTA_CAT.search(c.get("categoria", "")):

@@ -1,7 +1,7 @@
 """Módulo de ética (sección 7.4.1 de la tesis).
 
 - Lee y respeta robots.txt (RFC 9309) ANTES de cada petición, con la biblioteca Protego.
-  * robots.txt ausente (4xx)  -> todo permitido.
+  * robots.txt ausente (404/410 y otros 4xx) -> todo permitido; 401/403/429 -> se trata como ilegible (conservador).
   * robots.txt ilegible (5xx / error de red) -> todo prohibido (criterio conservador del RFC).
 - Solo peticiones GET sobre páginas públicas: sin login, sin formularios, sin carrito.
 - Agente identificable con contacto, verificación de certificados TLS, demora mínima entre
@@ -70,6 +70,8 @@ class Etica:
             r = self.s.get(o + "/robots.txt", timeout=self.cfg.TIMEOUT, allow_redirects=True)
             if r.status_code == 200:
                 res = (Protego.parse(r.text), "ok")
+            elif r.status_code in (401, 403, 429):      # criterio conservador: el sitio restringe el acceso
+                res = (None, "ilegible")
             elif 400 <= r.status_code < 500:
                 res = (None, "sin_robots")
             else:

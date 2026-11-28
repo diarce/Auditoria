@@ -15,7 +15,7 @@ import statistics
 import string
 import urllib.parse as up
 
-from .config import INDICADORES
+from .config import INDICADORES, indicadores_activos
 from .sitio import es_categoria, tipos_jsonld, norm
 
 
@@ -34,9 +34,33 @@ def _fuente_elementos(soup, patron, attrs=("class", "id", "aria-label")):
     return False
 
 
+def _migas(prod):
+    """Migas de pan de ubicación (Franco Ruiz, 2017, Tabla 3.3): sendero con enlaces a niveles superiores.
+    3 = sendero con >=2 enlaces o BreadcrumbList con >=2 niveles; 2 = elemento presente sin enlaces a niveles
+    superiores (no cumple la función de ubicación jerárquica); 1 = no detectado. No distingue ubicación/atributo
+    (Instone, 2002) y no puede observar las de 'ruta' (dependen del historial del usuario)."""
+    for o in prod.jsonld:
+        if "BreadcrumbList" in str(o.get("@type", "")):
+            n = len(o.get("itemListElement") or [])
+            return (3, f"BreadcrumbList con {n} niveles") if n >= 2 else (2, "BreadcrumbList con menos de 2 niveles")
+    rx = re.compile(r"breadcrumb|migas|bread-crumb|ruta-de-navegacion", re.I)
+    cont = []
+    for el in prod.soup.find_all(True):
+        for at in ("class", "id", "aria-label"):
+            v = el.get(at)
+            v = " ".join(v) if isinstance(v, list) else (v or "")
+            if v and rx.search(v):
+                cont.append(el)
+                break
+    if not cont:
+        return 1, "migas de pan no detectadas en ficha"
+    mx = max(len(c.find_all("a", href=True)) for c in cont)
+    return (3, f"sendero de migas con {mx} enlaces") if mx >= 2 else (2, "elemento de migas sin enlaces a niveles superiores")
+
+
 def auditar(sitio, etica, cfg):
     """Devuelve dict id -> (puntaje, evidencia)."""
-    R = {i[0]: (0, "pendiente de verificación manual") for i in INDICADORES if i[3] == "M"}
+    R = {i[0]: (0, "pendiente de verificación manual") for i in INDICADORES if i[3] == "M" and cfg.INCLUIR_MANUALES}
     home, cat, prod, reg = sitio.home, sitio.cat, sitio.prod, None
     sitio.descubrir() if not sitio.enlaces_home else None
     sitio.cargar_listado_y_producto()
@@ -65,8 +89,7 @@ def auditar(sitio, etica, cfg):
     R["D1.3"] = (3 if ncat >= 5 else 2 if ncat >= 2 else 1, f"{ncat} enlaces de categoría en inicio")
 
     if prod and prod.ok:
-        bc = "BreadcrumbList" in tipos_jsonld(prod.jsonld) or _fuente_elementos(prod.soup, r"breadcrumb|migas|bread-crumb")
-        R["D1.4"] = (3 if bc else 1, "breadcrumbs " + ("detectados" if bc else "no detectados") + " en ficha")
+        R["D1.4"] = _migas(prod)
     else:
         R["D1.4"] = (0, f"{nov} una ficha de producto")
 
@@ -100,8 +123,9 @@ def auditar(sitio, etica, cfg):
             R["D2.2"] = (2, "identificación alternativa (DNI/razón social/condición IVA)")
         else:
             R["D2.2"] = (1, "sin campo de identificación fiscal")
-        tiene_sel = bool(reg.soup.select("select, input[type=radio]")) and bool(re.search(
-            r"mayorista|minorista|tipo de (cuenta|cliente)|particular|empresa", reg.texto))
+        grupo = re.compile(r"mayorista|minorista|particular|revendedor|consumidor final|tipo de (cuenta|cliente|usuario)")
+        opciones = [norm(x.get_text(" ")) for x in reg.soup.select("select")] + [norm(x.get_text(" ")) for x in reg.soup.find_all("label")]
+        tiene_sel = bool(reg.soup.select("select, input[type=radio]")) and any(grupo.search(x) for x in opciones)
         both = "mayorista" in reg.texto and "minorista" in reg.texto
         R["D2.3"] = (3 if tiene_sel else 2 if both else 1,
                      "selector de tipo de cuenta" if tiene_sel else "menciona ambos tipos" if both else "sin diferenciación")
@@ -160,13 +184,17 @@ def auditar(sitio, etica, cfg):
             R[k] = (0, f"{nov} una ficha de producto")
 
     # ---------------- D4 ----------------
-    rx_btn = re.compile(r"agregar al carrito|anadir al carrito|add to cart|comprar|agregar|sumar al carrito|al carrito")
+    fuerte = re.compile(r"agregar al carrito|anadir al carrito|add to cart|sumar al carrito|agregar al pedido|comprar ahora")
+    debil = re.compile(r"^(comprar|agregar|anadir|sumar|pedir)\b")      # solo en <button>/<input>, texto corto
+
     def hay_boton(p):
         if not (p and p.ok):
             return False
         for el in p.soup.find_all(["button", "input", "a"]):
-            txt = norm(el.get_text(" ") + " " + str(el.get("value", "")))
-            if rx_btn.search(txt):
+            txt = norm(el.get_text(" ", strip=True) + " " + str(el.get("value", ""))).strip()
+            if fuerte.search(txt):
+                return True
+            if el.name in ("button", "input") and len(txt) < 25 and debil.search(txt):
                 return True
         return _fuente_elementos(p.soup, r"add[-_ ]?to[-_ ]?cart|addtocart|btn-comprar|agregar-carrito")
     if prod and prod.ok:
@@ -204,8 +232,8 @@ def auditar(sitio, etica, cfg):
 
     # ---------------- D6 ----------------
     medios = {"visa": r"\bvisa\b", "mastercard": r"master ?card", "amex": r"american express|amex", "cabal": r"\bcabal\b",
-              "naranja": r"naranja", "mercadopago": r"mercado ?pago", "transferencia": r"transferencia|\bcbu\b",
-              "efectivo": r"efectivo", "debito": r"debito", "credito": r"credito|tarjeta", "modo": r"\bmodo\b",
+              "naranja": r"tarjeta naranja|\bnaranja x\b", "mercadopago": r"mercado ?pago", "transferencia": r"transferencia|\bcbu\b",
+              "efectivo": r"efectivo", "debito": r"debito", "credito": r"credito|tarjeta", "modo": r"\bmodo\b.{0,30}(pago|qr|billetera)|(pago|qr|billetera).{0,30}\bmodo\b",
               "cuenta_dni": r"cuenta dni", "cheque": r"cheque"}
     hallados = [k for k, p in medios.items() if re.search(p, texto_all)]
     R["D6.1"] = (3 if len(hallados) >= 3 else 2 if hallados else 1, f"{len(hallados)} medios de pago mencionados")
@@ -253,7 +281,9 @@ def auditar(sitio, etica, cfg):
     else:
         R["D8.4"] = (0, "sin imágenes en las páginas relevadas")
 
-    faltan = {i[0] for i in INDICADORES} - set(R)
+    activos = {i[0] for i in indicadores_activos(cfg)}
+    R = {k: v for k, v in R.items() if k in activos}
+    faltan = activos - set(R)
     assert not faltan, faltan
     return R
 

@@ -9,7 +9,7 @@ import statistics
 from datetime import datetime
 
 from .auditor import puntaje_dimension
-from .config import DIMENSIONES, ESCALA, INDICADORES, VERSION
+from .config import DIMENSIONES, ESCALA, INDICADORES, VERSION, indicadores_activos
 from .filtro import ETAPAS
 
 COL = {3: "#2e7d32", 2: "#f9a825", 1: "#c62828", 0: "#9e9e9e"}
@@ -39,11 +39,13 @@ def generar(meta, registros_filtro, aud, alias, manual_pendiente, cfg):
     meta: dict con parámetros de la corrida.  registros_filtro: lista de registros del filtro.
     aud: {alias: {id: (puntaje, evidencia)}}.  alias: lista ordenada de alias auditados.
     """
-    ind_por_dim = {d: [i for i in INDICADORES if i[1] == d] for d in DIMENSIONES}
+    act = indicadores_activos(cfg)
+    ind_por_dim = {d: [i for i in act if i[1] == d] for d in DIMENSIONES}
+    tot_dim = {d: sum(1 for i in INDICADORES if i[1] == d) for d in DIMENSIONES}
     n = len(alias)
     out = [f"<!doctype html><html lang='es'><head><meta charset='utf-8'><title>Auditoría de plataformas — informe</title><style>{CSS}</style></head><body>"]
     out.append("<h1>Exploración del desarrollo funcional de plataformas de comercio electrónico</h1>")
-    out.append("<p>Tiendas mayoristas de bienes de consumo masivo — Posadas, Misiones. Instrumento: 32 indicadores (Anexo C), "
+    out.append(f"<p>Tiendas mayoristas de bienes de consumo masivo — Posadas, Misiones. Instrumento (Anexo C): {len(act)} indicadores de observación automática, "
                "escala 0–3. Componente exploratorio, independiente de la encuesta.</p>")
 
     # --- 0. ficha
@@ -68,7 +70,9 @@ def generar(meta, registros_filtro, aud, alias, manual_pendiente, cfg):
         filas.append(f"<tr><td>{k}</td><td>{e(nombre)}</td><td class='n'>{ent}</td><td class='n'>{x}</td><td class='n'>{restantes}</td>"
                      f"<td>{e('; '.join(f'{m} ({c})' for m, c in motivos.items()))}</td></tr>")
     out.append(_tabla(["Etapa", "Criterio", "Ingresan", "Excluidos", "Continúan", "Motivos"], filas))
-    out.append(f"<p>Candidatos únicos evaluados: <b>{total}</b>. Plataformas observables auditadas: <b>{n}</b>. "
+    obt = meta.get("Candidatos obtenidos", total)
+    out.append(f"<p>Candidatos obtenidos: <b>{obt}</b>; duplicados por dominio descartados: <b>{obt - total}</b>; "
+               f"candidatos únicos evaluados: <b>{total}</b>. Plataformas observables auditadas: <b>{n}</b>. "
                "Las exclusiones por etapa constituyen un hallazgo en sí mismo (plataformas no observables o fuera de alcance).</p>")
     nv = {}
     for r in registros_filtro:
@@ -92,19 +96,21 @@ def generar(meta, registros_filtro, aud, alias, manual_pendiente, cfg):
     def frec(dims):
         c = {0: 0, 1: 0, 2: 0, 3: 0}
         for a in alias:
-            for i in INDICADORES:
+            for i in act:
                 if i[1] in dims:
                     c[aud[a][i[0]][0]] += 1
         return c
     filas = []
     for etiqueta, dims in [("Total", set(DIMENSIONES))] + [(f"{d} {nm}", {d}) for d, nm in DIMENSIONES.items()]:
         c = frec(dims)
-        t = sum(c.values())
-        filas.append(f"<tr><td>{e(etiqueta)}</td><td class='n'>{t}</td>" + "".join(
-            f"<td class='n'>{c[k]} ({100 * c[k] / t:.0f}%)</td>" for k in (3, 2, 1, 0)) + "</tr>")
-    out.append(_tabla(["Dimensión", "Observaciones", "3 Pleno", "2 Parcial", "1 Incumple", "0 N/A o no verificable"], filas))
-    out.append("<p class='nota'>Las observaciones están anidadas en cada plataforma (no son unidades muestrales independientes). "
-               "El 0 incluye los 7 indicadores de verificación manual mientras no se cargue ese protocolo.</p>")
+        v = c[1] + c[2] + c[3]
+        pc = lambda k: f"{c[k]} ({100 * c[k] / v:.1f}%)" if v else "—"  # noqa: E731
+        filas.append(f"<tr><td>{e(etiqueta)}</td><td class='n'>{v}</td><td class='n'>{pc(3)}</td><td class='n'>{pc(2)}</td>"
+                     f"<td class='n'>{pc(1)}</td><td class='n'>{c[0]}</td></tr>")
+    out.append(_tabla(["Dimensión", "Observaciones válidas", "3 Pleno", "2 Parcial", "1 Incumple", "0 No verificable (conteo)"], filas))
+    out.append("<p class='nota'>Los porcentajes se calculan sobre las observaciones válidas (puntaje &gt; 0); el 0 se informa solo como conteo y no entra en el denominador. "
+               "Un 0 significa que el procedimiento automático no pudo verificar el indicador (p. ej. no se localizó una ficha de producto o un formulario público, "
+               "o el contenido depende de JavaScript); no equivale a ausencia de la funcionalidad. Las observaciones están anidadas en cada plataforma.</p>")
 
     # --- 3. perfiles
     out.append("<h2>3. Perfiles por dimensión (Ec. B.1)</h2>")
@@ -116,45 +122,54 @@ def generar(meta, registros_filtro, aud, alias, manual_pendiente, cfg):
             cel.append("<td class='n'>—</td>" if s is None else
                        f"<td class='sc' style='background:{COL[max(1, min(3, round(s)))]}'>{s:.2f}</td>")
         filas.append(f"<tr><td>{e(a)}</td>{''.join(cel)}</tr>")
-    resumen = []
+    resumen, nval = [], []
     for d in DIMENSIONES:
         v = [s for a in alias if (s := puntaje_dimension([aud[a][i[0]][0] for i in ind_por_dim[d]])) is not None]
-        resumen.append(f"{statistics.median(v):.2f} [{min(v):.2f}–{max(v):.2f}]" if v else "—")
+        nval.append(f"{len(v)} de {n}")
+        if len(v) < 3:
+            resumen.append(("n = " + str(len(v)) + (": " + ", ".join(f"{x:.2f}" for x in v) if v else "")))
+        else:
+            resumen.append(f"{statistics.median(v):.2f} [{min(v):.2f}–{max(v):.2f}]")
+    filas.append("<tr><th>Plataformas con dato</th>" + "".join(f"<td class='n'>{x}</td>" for x in nval) + "</tr>")
     filas.append("<tr><th>Mediana [mín–máx]</th>" + "".join(f"<td class='n'>{x}</td>" for x in resumen) + "</tr>")
     out.append(_tabla(["Plataforma"] + [f"{d}<br>{nm}" for d, nm in DIMENSIONES.items()], filas))
-    out.append("<p class='nota'>Sin índice agregado: la lectura es por perfil. El promedio por dimensión es una medida exploratoria de "
-               "tendencia central sobre una escala ordinal, no una magnitud de intervalo. '—' = dimensión sin indicadores verificables.</p>")
+    cob = ", ".join(f"{d}: {len(ind_por_dim[d])}" for d in DIMENSIONES)
+    out.append("<p class='nota'>Cada celda es el puntaje de la plataforma en la dimensión (Ec. B.1: promedio de los indicadores válidos; medida exploratoria sobre escala ordinal, "
+               "no magnitud de intervalo). La fila inferior resume entre plataformas con la mediana y el rango; con menos de 3 plataformas con dato se muestran los valores. "
+               f"'—' = ningún indicador verificable. Indicadores por dimensión: {e(cob)}. No se calcula índice agregado.</p>")
 
     # --- 4. detalle por dimensión
     out.append("<h2>4. Detalle por dimensión</h2>")
     for d, nm in DIMENSIONES.items():
-        out.append(f"<h3>{d} — {e(nm)}</h3>")
+        out.append(f"<h3>{d} — {e(nm)} <small>({len(ind_por_dim[d])} indicadores)</small></h3>")
         filas = []
         for (iid, _, nombre, modo, fund) in ind_por_dim[d]:
             ps = [aud[a][iid][0] for a in alias]
             valid = [p for p in ps if p > 0]
             pleno = sum(1 for p in valid if p == 3)
-            pct = f"{100 * pleno / len(valid):.0f}%" if valid else "—"
+            pct = (f"{pleno} de {len(valid)}" + (f" ({100 * pleno / len(valid):.0f}%)" if len(valid) >= 10 else "")) if valid else "—"
             cel = "".join(_celda(p) for p in ps)
             filas.append(f"<tr><td>{iid}</td><td>{e(nombre)}</td><td class='n'>{modo}</td><td class='n'>{fund[:4]}.</td>{cel}"
                          f"<td class='n'>{pct}</td><td class='n'>{len(valid)}/{n}</td></tr>")
-        cab = ["ID", "Indicador", "A/M", "Fund."] + [f"S{j + 1}" for j in range(n)] + ["% pleno", "Válidos"]
+        cab = ["ID", "Indicador", "A/M", "Fund."] + [f"S{j + 1}" for j in range(n)] + ["Pleno (k de n válidos)", "Válidos"]
         out.append(_tabla(cab, filas))
     out.append("<p class='nota'>S1…Sn corresponden a 'Sitio Auditado 1…n' (orden del perfil de la sección 3). "
                "Fund.: Dire.= concordancia directa, Parc.= parcial, Cont.= contextual (elaboración propia). "
-               "% pleno se calcula sobre observaciones válidas (puntaje &gt; 0).</p>")
+               "El cumplimiento pleno se informa como «k de n» sobre observaciones válidas (puntaje &gt; 0); el porcentaje se agrega solo con n ≥ 10.</p>")
     out.append("<h3>Evidencia por plataforma</h3><details><summary>Mostrar la regla que originó cada puntaje</summary>")
     for a in alias:
-        filas = [f"<tr><td>{iid}</td><td class='n'>{aud[a][iid][0]}</td><td>{e(aud[a][iid][1])}</td></tr>" for iid, *_ in INDICADORES]
+        filas = [f"<tr><td>{iid}</td><td class='n'>{aud[a][iid][0]}</td><td>{e(aud[a][iid][1])}</td></tr>" for iid, *_ in act]
         out.append(f"<h4>{e(a)}</h4>" + _tabla(["ID", "Puntaje", "Evidencia"], filas))
     out.append("</details>")
 
-    # --- 5. manual
-    out.append("<h2>5. Verificación manual pendiente</h2>")
-    man = [i for i in INDICADORES if i[3] == "M"]
-    out.append(f"<p>Indicadores con protocolo manual: {e(', '.join(i[0] for i in man))}. "
-               f"Pendientes de carga en esta corrida: <b>{manual_pendiente}</b> de {len(man) * n}. "
-               "Se completan en <code>manual_plantilla.csv</code> y se incorporan con <code>aplicar_manual()</code>.</p>")
+    # --- 5. instrumento
+    out.append(f"<h2>5. Indicadores evaluados ({len(act)})</h2>")
+    out.append("<p>Indicadores observables de forma automática, mediante peticiones GET a páginas públicas y bajo el protocolo ético.</p>")
+    filas = [f"<tr><td>{i[0]}</td><td>{e(DIMENSIONES[i[1]])}</td><td>{e(i[2])}</td><td>{e(i[4])}</td></tr>" for i in act]
+    out.append(_tabla(["ID", "Dimensión", "Indicador", "Fundamentación"], filas))
+    nd = sum(1 for i in act if i[4] == "Directa"); npar = sum(1 for i in act if i[4] == "Parcial"); nc = sum(1 for i in act if i[4] == "Contextual")
+    out.append(f"<p class='nota'>Fundamentación: {nd} de concordancia directa, {npar} parcial y {nc} contextual (elaboración propia), "
+               f"sobre {len(act)} indicadores.</p>")
 
     # --- 6. limitaciones
     out.append("<h2>6. Limitaciones y alcance de la lectura</h2><ul>"
